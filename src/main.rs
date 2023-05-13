@@ -8,12 +8,13 @@ use std::path::PathBuf;
 
 const DB_DIR: &str = "./database";
 
+/** @table: paths must be stored as absolute paths */
 struct DataBase {
     table: HashMap<PathBuf, Value>,
 }
 
 impl DataBase {
-    fn open(dir: String) -> DataBase {
+    fn open(dir: PathBuf) -> DataBase {
         let mut table = HashMap::new();
         let mut dir_entry = fs::read_dir(dir).expect("Database not found");
         while let Some(Ok(path)) = dir_entry.next() {
@@ -41,21 +42,29 @@ impl DataBase {
             .unwrap()
             .to_string();
         let json = Value::Object(data);
-        let path = PathBuf::from(format!("{}/{id}.json", DB_DIR));
+        let path = PathBuf::from(format!("{DB_DIR}/{id}.json"));
         let file = File::create(&path)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer(writer, &json)?;
+        let path = path.canonicalize()?;
         self.table.insert(path, json);
         Ok(())
     }
 
-    fn delete(&mut self, id: String) {}
+    fn delete(&mut self, id: String) {
+        if let Ok(path) = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize() {
+            self.table.remove(&path);
+            fs::remove_file(path).expect("schrodinger's files");
+        }
+    }
 }
 
 fn main() {
-    let mut x = DataBase::open(DB_DIR.to_string());
-    let mut m = serde_json::Map::new();
-    m.insert("_id".to_string(), Value::String("1".to_string()));
-    x.add(m).unwrap();
-    println!("{:?}", x.table)
+    let p = PathBuf::from(DB_DIR).canonicalize().unwrap();
+    let mut x = DataBase::open(p);
+    // let mut m = serde_json::Map::new();
+    // m.insert("_id".to_string(), Value::String("1".to_string()));
+    // x.add(m).unwrap()
+    x.delete("1".to_string());
+    // println!("{:?}", p)
 }
