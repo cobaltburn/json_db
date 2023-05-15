@@ -57,14 +57,31 @@ impl DataBase {
             fs::remove_file(path).expect("schrodinger's files");
         }
     }
+
+    fn search(self, args: Vec<String>) -> Vec<Value> {
+        let mut results = vec![];
+        if args.contains(&"*".to_string()) {
+            return self.table.into_values().collect();
+        }
+        for json in self.table.into_values() {
+            let json = json.as_object().unwrap();
+            let mut result = map::Map::new();
+            args.iter().for_each(|arg| {
+                if let Some((k, v)) = json.get_key_value(arg) {
+                    result.insert(k.clone(), v.clone());
+                }
+            });
+            if !result.is_empty() {
+                results.push(Value::Object(result));
+            }
+        }
+        results
+    }
 }
 
 fn main() {
-    let p = PathBuf::from(DB_DIR).canonicalize().unwrap();
-    let mut x = DataBase::open(p);
-    // let mut m = serde_json::Map::new();
-    // m.insert("_id".to_string(), Value::String("1".to_string()));
-    // x.add(m).unwrap()
-    x.delete("1".to_string());
-    // println!("{:?}", p)
+    let path = PathBuf::from(DB_DIR).canonicalize().unwrap();
+    let mut database = DataBase::open(path);
+    let a = database.search(vec![]);
+    println!("{a:?}");
 }
