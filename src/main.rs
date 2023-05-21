@@ -11,7 +11,7 @@ const DB_DIR: &str = "./database";
 /** @tables: paths must be stored as absolute paths */
 struct DataBase {
     table: HashMap<PathBuf, Value>,
-    dir: PathBuf,
+    dir: String,
 }
 
 impl DataBase {
@@ -32,7 +32,11 @@ impl DataBase {
                 }
             }
         }
-        DataBase { table, dir }
+
+        DataBase {
+            table,
+            dir: dir.into_os_string().into_string().unwrap(),
+        }
     }
 
     fn add(&mut self, data: map::Map<String, Value>) -> Result<(), Box<dyn Error>> {
@@ -43,7 +47,7 @@ impl DataBase {
             .unwrap()
             .to_string();
         let json = Value::Object(data);
-        let path = PathBuf::from(format!("{DB_DIR}/{id}.json"));
+        let path = PathBuf::from(format!("{}/{id}.json", self.dir));
         let file = File::create(&path)?;
         let writer = BufWriter::new(file);
         serde_json::to_writer(writer, &json)?;
@@ -53,7 +57,7 @@ impl DataBase {
     }
 
     fn delete(&mut self, id: String) -> Result<(), Box<dyn Error>> {
-        let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
+        let path = PathBuf::from(format!("{}/{id}.json", self.dir)).canonicalize()?;
         self.table.remove(&path).ok_or("path not found in table")?;
         fs::remove_file(path)?;
         Ok(())
@@ -80,7 +84,7 @@ impl DataBase {
     }
 
     fn query_id(&self, id: String) -> Option<&Value> {
-        if let Ok(path) = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize() {
+        if let Ok(path) = PathBuf::from(format!("{}/{id}.json", self.dir)).canonicalize() {
             let json = self.table.get(&path)?;
             return Some(json);
         }
@@ -88,7 +92,7 @@ impl DataBase {
     }
 
     fn modify(&mut self, id: String, field: String, val: Value) -> Result<(), Box<dyn Error>> {
-        let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
+        let path = PathBuf::from(format!("{}/{id}.json", self.dir)).canonicalize()?;
         let value = self
             .table
             .get_mut(&path)
