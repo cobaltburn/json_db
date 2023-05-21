@@ -1,17 +1,15 @@
 use serde_json::{map, Value};
 use std::collections::HashMap;
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::prelude::*;
 use std::io::BufWriter;
 use std::path::PathBuf;
 
 const DB_DIR: &str = "./database";
 
-/** @table: paths must be stored as absolute paths */
-struct DataBase {
-    table: HashMap<PathBuf, Value>,
-}
+/** paths must be stored as absolute paths */
+struct DataBase(HashMap<PathBuf, Value>);
 
 impl DataBase {
     fn open(dir: PathBuf) -> DataBase {
@@ -31,7 +29,7 @@ impl DataBase {
                 }
             }
         }
-        DataBase { table }
+        DataBase(table)
     }
 
     fn add(&mut self, data: map::Map<String, Value>) -> Result<(), Box<dyn Error>> {
@@ -47,23 +45,23 @@ impl DataBase {
         let writer = BufWriter::new(file);
         serde_json::to_writer(writer, &json)?;
         let path = path.canonicalize()?;
-        self.table.insert(path, json);
+        self.0.insert(path, json);
         Ok(())
     }
 
-    fn delete(&mut self, id: String) {
-        if let Ok(path) = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize() {
-            self.table.remove(&path);
-            fs::remove_file(path).expect("schrodinger's files");
-        }
+    fn delete(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+        let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
+        self.0.remove(&path).ok_or("path not found in table")?;
+        fs::remove_file(path)?;
+        Ok(())
     }
 
-    fn search(self, args: Vec<String>) -> Vec<Value> {
+    fn query(self, args: Vec<String>) -> Vec<Value> {
         let mut results = vec![];
         if args.contains(&"*".to_string()) {
-            return self.table.into_values().collect();
+            return self.0.into_values().collect();
         }
-        for json in self.table.into_values() {
+        for json in self.0.into_values() {
             let json = json.as_object().unwrap();
             let mut result = map::Map::new();
             args.iter().for_each(|arg| {
@@ -77,11 +75,34 @@ impl DataBase {
         }
         results
     }
+
+    fn query_id(&self, id: String) -> Option<&Value> {
+        if let Ok(path) = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize() {
+            let json = self.0.get(&path)?;
+            return Some(json);
+        }
+        None
+    }
+
+    fn modify(&mut self, id: String, field: String, val: Value) -> Result<(), Box<dyn Error>> {
+        let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
+        let value = self.0.get_mut(&path).ok_or("id not found in database")?;
+        let json = value
+            .as_object_mut()
+            .expect("none object type was passed to the database");
+        json.entry(field)
+            .and_modify(|v| *v = val.clone())
+            .or_insert(val);
+        let mut file = OpenOptions::new().write(true).truncate(true).open(&path)?;
+        let val_str = serde_json::to_string(value)?;
+        file.write(val_str.as_bytes())?;
+        Ok(())
+    }
 }
 
 fn main() {
     let path = PathBuf::from(DB_DIR).canonicalize().unwrap();
     let mut database = DataBase::open(path);
-    let a = database.search(vec![]);
-    println!("{a:?}");
+    let x = database.query_id("109587".to_string()).unwrap();
+    println!("{:?}", x);
 }
