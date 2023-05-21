@@ -8,13 +8,16 @@ use std::path::PathBuf;
 
 const DB_DIR: &str = "./database";
 
-/** paths must be stored as absolute paths */
-struct DataBase(HashMap<PathBuf, Value>);
+/** @tables: paths must be stored as absolute paths */
+struct DataBase {
+    table: HashMap<PathBuf, Value>,
+    dir: PathBuf,
+}
 
 impl DataBase {
     fn open(dir: PathBuf) -> DataBase {
         let mut table = HashMap::new();
-        let mut dir_entry = fs::read_dir(dir).expect("Database not found");
+        let mut dir_entry = fs::read_dir(&dir).expect("Database not found");
         while let Some(Ok(path)) = dir_entry.next() {
             let path = path.path();
             if !path.is_file() {
@@ -29,13 +32,13 @@ impl DataBase {
                 }
             }
         }
-        DataBase(table)
+        DataBase { table, dir }
     }
 
     fn add(&mut self, data: map::Map<String, Value>) -> Result<(), Box<dyn Error>> {
         let id = data
             .get("_id")
-            .expect("json invalid _id not found")
+            .expect("json invalid, id not found")
             .as_str()
             .unwrap()
             .to_string();
@@ -45,13 +48,13 @@ impl DataBase {
         let writer = BufWriter::new(file);
         serde_json::to_writer(writer, &json)?;
         let path = path.canonicalize()?;
-        self.0.insert(path, json);
+        self.table.insert(path, json);
         Ok(())
     }
 
     fn delete(&mut self, id: String) -> Result<(), Box<dyn Error>> {
         let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
-        self.0.remove(&path).ok_or("path not found in table")?;
+        self.table.remove(&path).ok_or("path not found in table")?;
         fs::remove_file(path)?;
         Ok(())
     }
@@ -59,9 +62,9 @@ impl DataBase {
     fn query(self, args: Vec<String>) -> Vec<Value> {
         let mut results = vec![];
         if args.contains(&"*".to_string()) {
-            return self.0.into_values().collect();
+            return self.table.into_values().collect();
         }
-        for json in self.0.into_values() {
+        for json in self.table.into_values() {
             let json = json.as_object().unwrap();
             let mut result = map::Map::new();
             args.iter().for_each(|arg| {
@@ -78,7 +81,7 @@ impl DataBase {
 
     fn query_id(&self, id: String) -> Option<&Value> {
         if let Ok(path) = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize() {
-            let json = self.0.get(&path)?;
+            let json = self.table.get(&path)?;
             return Some(json);
         }
         None
@@ -86,7 +89,10 @@ impl DataBase {
 
     fn modify(&mut self, id: String, field: String, val: Value) -> Result<(), Box<dyn Error>> {
         let path = PathBuf::from(format!("{DB_DIR}/{id}.json")).canonicalize()?;
-        let value = self.0.get_mut(&path).ok_or("id not found in database")?;
+        let value = self
+            .table
+            .get_mut(&path)
+            .ok_or("id not found in database")?;
         let json = value
             .as_object_mut()
             .expect("none object type was passed to the database");
@@ -103,6 +109,6 @@ impl DataBase {
 fn main() {
     let path = PathBuf::from(DB_DIR).canonicalize().unwrap();
     let mut database = DataBase::open(path);
-    let x = database.query_id("109587".to_string()).unwrap();
+    let x = database.query_id("1tabl9587".to_string()).unwrap();
     println!("{:?}", x);
 }
