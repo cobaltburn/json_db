@@ -13,34 +13,38 @@ pub struct DataBase {
 }
 
 impl DataBase {
-    pub fn open(dir: PathBuf) -> DataBase {
+    #![allow(dead_code)]
+    pub fn new() -> Self {
+        DataBase {
+            table: HashMap::new(),
+            dir: "".into(),
+        }
+    }
+    pub fn connect(&mut self, dir: PathBuf) -> Result<(), Box<dyn Error>> {
         let mut table = HashMap::new();
-        let mut dir_entry = fs::read_dir(&dir).expect("Database not found");
-        while let Some(Ok(path)) = dir_entry.next() {
-            let path = path.path();
+        let mut dir_entry = fs::read_dir(&dir).or(Err("invalid database not found"))?;
+        while let Some(path) = dir_entry.next() {
+            let path = path?.path();
             if !path.is_file() {
                 continue;
             }
-            if let Ok(mut file) = File::open(&path) {
-                let mut content = String::new();
-                file.read_to_string(&mut content)
-                    .expect("File unable to write to string");
-                if let Ok(json) = serde_json::from_str::<Value>(&content) {
-                    table.insert(path, json);
-                }
+
+            let mut file = File::open(&path)?;
+            let mut content = String::new();
+            file.read_to_string(&mut content)?;
+            if let Ok(json) = serde_json::from_str::<Value>(&content) {
+                table.insert(path, json);
             }
         }
-
-        DataBase {
-            table,
-            dir: dir.into_os_string().into_string().unwrap(),
-        }
+        self.table = table;
+        self.dir = dir.to_str().unwrap().into();
+        Ok(())
     }
 
     pub fn add(&mut self, data: map::Map<String, Value>) -> Result<(), Box<dyn Error>> {
         let id = data
             .get("_id")
-            .expect("json invalid, id not found")
+            .ok_or("json invalid, id not found")?
             .as_str()
             .unwrap()
             .to_string();
@@ -54,9 +58,9 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn delete(&mut self, id: String) -> Result<(), Box<dyn Error>> {
+    pub fn delete(&mut self, id: &str) -> Result<(), Box<dyn Error>> {
         let path = PathBuf::from(format!("{}/{id}.json", self.dir)).canonicalize()?;
-        self.table.remove(&path).ok_or("path not found in table")?;
+        self.table.remove(&path).ok_or("path not found")?;
         fs::remove_file(path)?;
         Ok(())
     }
