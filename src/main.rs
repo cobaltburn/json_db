@@ -30,33 +30,39 @@ async fn main() -> std::io::Result<()> {
 }
 
 async fn add(json: web::Json<Value>) -> impl Responder {
-    if let Some(json) = json.0.as_object() {
-        if let Ok(mut database) = DB.write() {
-            if let Err(e) = database.add(json.clone()) {
-                return HttpResponse::BadRequest().body(e.to_string());
-            }
-            return HttpResponse::Ok().body("element added");
-        }
+    let json = json.0.as_object();
+    if json.is_none() {
+        return HttpResponse::BadRequest().body("value could not be processed");
     }
-    HttpResponse::BadRequest().body("value could not be processed")
+    let json = json.unwrap();
+    if let Ok(mut database) = DB.write() {
+        if let Err(e) = database.add(json.clone()) {
+            return HttpResponse::BadRequest().body(e.to_string());
+        }
+        return HttpResponse::Ok().body("element added");
+    }
+    HttpResponse::BadRequest().body("unable to add element")
 }
 
 async fn delete(json: web::Json<Value>) -> impl Responder {
-    if let Some(json) = json.0.as_object() {
-        if let Ok(mut database) = DB.write() {
-            let id = json.get("_id");
-            if id.is_none() {
-                return HttpResponse::BadRequest().body("format invalid");
-            }
-            let id = id.unwrap().as_str();
-            if id.is_none() {
-                return HttpResponse::BadRequest().body("format invalid");
-            }
-            if let Err(e) = database.delete(id.unwrap()) {
-                return HttpResponse::BadRequest().body(e.to_string());
-            }
+    let json = json.0.as_object();
+    if json.is_none() {
+        return HttpResponse::BadRequest().body("invalid format");
+    }
+    let json = json.unwrap();
+    if let Ok(mut database) = DB.write() {
+        let id = json.get("_id");
+        if id.is_none() {
+            return HttpResponse::BadRequest().body("format invalid");
+        }
+        let id = id.unwrap().as_str();
+        if id.is_none() {
+            return HttpResponse::BadRequest().body("format invalid");
+        }
+        if let Err(e) = database.delete(id.unwrap()) {
+            return HttpResponse::BadRequest().body(e.to_string());
         }
         return HttpResponse::Ok().body("element removed");
     }
-    HttpResponse::BadRequest().body("invalid format")
+    HttpResponse::BadRequest().body("failed to delete element")
 }
